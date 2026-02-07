@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>複委托交易計算機 v.2</title>
+    <style>
+        :root {
+            --primary-color: #8e8294;
+            --bg-color: #f1f3f2;
+        }
+        body { font-family: -apple-system, "Microsoft JhengHei", sans-serif; background-color: var(--bg-color); display: flex; justify-content: center; padding: 20px; margin: 0; transition: background-color 0.5s; }
+        .container { width: 100%; max-width: 565px; }
+        
+        .mode-switch { display: flex; gap: 12px; margin-bottom: 25px; }
+        .mode-btn { flex: 1; padding: 18px; border-radius: 12px; border: none; background: #dcdcdc; color: #444; cursor: pointer; font-weight: bold; font-size: 20px; transition: 0.3s; }
+        .mode-btn.active { background: var(--primary-color); color: white; }
+        
+        .card { background: white; border-radius: 20px; padding: 25px; margin-bottom: 20px; border: 1px solid #e0e0e0; }
+        .card-title { text-align: center; font-size: 24px; color: #333; margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 15px; font-weight: 500; }
+        
+        .input-group { margin-bottom: 20px; }
+        label { display: block; font-size: 16px; font-weight: bold; color: #555; margin-bottom: 10px; }
+        input { width: 100%; padding: 14px; border: 1px solid #ddd; border-radius: 10px; box-sizing: border-box; font-size: 16px; background: #fafafa; }
+        
+        .sub-toggle { display: flex; background: #f0f0f0; border-radius: 10px; padding: 4px; margin-bottom: 20px; }
+        .sub-btn { flex: 1; padding: 8px; border: none; border-radius: 6px; background: none; cursor: pointer; font-size: 14px; color: #888; transition: 0.3s; }
+        .sub-btn.active { background: white; color: #333; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+
+        .batch-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+        .batch-row input { flex: 1; }
+        .remove-btn { color: #ff5252; cursor: pointer; font-size: 24px; font-weight: bold; padding: 0 5px; }
+        .add-batch-btn { width: 100%; padding: 12px; border: 2px dashed #ccc; border-radius: 10px; background: none; color: #888; cursor: pointer; font-size: 16px; margin-bottom: 20px; }
+        
+        .toggle-group { display: flex; background: #eee; border-radius: 10px; padding: 5px; margin-bottom: 20px; }
+        .toggle-btn { flex: 1; padding: 12px; border: none; border-radius: 8px; background: none; cursor: pointer; font-size: 16px; color: #777; transition: 0.3s; }
+        .toggle-btn.active { background: white; color: #333; font-weight: bold; }
+        
+        .main-btn { width: 100%; padding: 20px; background: var(--primary-color); color: white; border: none; border-radius: 15px; font-size: 20px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        
+        .result-area { margin-top: 25px; line-height: 2.5; font-size: 18px; color: #333; }
+        .res-row { display: flex; justify-content: space-between; border-bottom: 1px solid #f0f0f0; }
+        .res-val { font-weight: bold; }
+        .profit-red { color: #d9534f; }
+
+        .history-card { background: white; border-radius: 20px; padding: 25px; border: 1px solid #e0e0e0; }
+        .history-title { font-size: 20px; font-weight: bold; margin-bottom: 15px; color: #444; }
+        table { width: 100%; border-collapse: collapse; font-size: 16px; }
+        th { background: #f8f8f8; color: #888; font-weight: normal; padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        td { padding: 15px 12px; border-bottom: 1px solid #f5f5f5; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="mode-switch">
+        <button id="btnHK" class="mode-btn active" onclick="setMarket('HK')">🇭🇰 港股模式</button>
+        <button id="btnUS" class="mode-btn" onclick="setMarket('US')">🇺🇸 美股模式</button>
+    </div>
+
+    <div class="card">
+        <div class="card-title" id="marketTitle">港股交易計算機</div>
+        
+        <div class="input-group">
+            <label>代號 / 股名</label>
+            <input type="text" id="stockName" placeholder="例如: 0700 或 NVDA">
+        </div>
+
+        <div id="usSubToggle" class="sub-toggle" style="display:none;">
+            <button id="usStock" class="sub-btn active" onclick="setUSAsset('Stock')">一般股票 (0.08%)</button>
+            <button id="usETF" class="sub-btn" onclick="setUSAsset('ETF')">ETF (固定 $3)</button>
+        </div>
+
+        <div class="input-group">
+            <label>分批買入 (單價 / 股數)</label>
+            <div id="batchContainer">
+                <div class="batch-row">
+                    <input type="number" class="bPrice" placeholder="價格" step="0.001">
+                    <input type="number" class="bShares" placeholder="股數">
+                    <span style="width:25px;"></span>
+                </div>
+            </div>
+            <button class="add-batch-btn" onclick="addBatchRow()">+ 新增買入批次</button>
+        </div>
+        
+        <div class="toggle-group">
+            <button id="tabProfit" class="toggle-btn active" onclick="setCalcMode('profit')">設定目標利潤%</button>
+            <button id="tabPrice" class="toggle-btn" onclick="setCalcMode('price')">設定預期賣出價</button>
+        </div>
+        
+        <div class="input-group">
+            <label id="targetLabel">目標利潤 (%)</label>
+            <input type="number" id="targetVal" value="10" step="0.01">
+        </div>
+
+        <button class="main-btn" onclick="calculate()">立即計算並變換顏色</button>
+
+        <div id="results" class="result-area" style="display:none;">
+            <div class="res-row"><span>平均買入成本:</span> <span class="res-val" id="resAvgBuy"></span></div>
+            <div class="res-row"><span>總交易稅費 (買+賣):</span> <span class="res-val" id="resTotalFees"></span></div>
+            <div class="res-row"><span>預期利潤 %:</span> <span class="res-val profit-red" id="resProfitPct"></span></div>
+            <div class="res-row"><span>最終純收益:</span> <span class="res-val profit-red" id="resNetProfit"></span></div>
+            <div class="res-row"><span>保本價:</span> <span class="res-val" id="resBreakeven"></span></div>
+        </div>
+    </div>
+
+    <div class="history-card">
+        <div class="history-title">📜 交易紀錄</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>市場</th><th>股票</th><th>平均成本</th><th>賣出</th><th>純利</th>
+                </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let currentMarket = 'HK';
+    let usAssetType = 'Stock';
+    let currentMode = 'profit';
+    const themeColors = ['#8e8294', '#94a89a', '#a89494', '#949ea8', '#a8a294', '#b3a198', '#9bb2c0'];
+    let colorIdx = 0;
+
+    function setMarket(m) {
+        currentMarket = m;
+        document.getElementById('btnHK').className = (m === 'HK' ? 'mode-btn active' : 'mode-btn');
+        document.getElementById('btnUS').className = (m === 'US' ? 'mode-btn active' : 'mode-btn');
+        document.getElementById('marketTitle').innerText = m === 'HK' ? '港股交易計算機' : '美股交易計算機';
+        document.getElementById('usSubToggle').style.display = m === 'US' ? 'flex' : 'none';
+    }
+
+    function setUSAsset(type) {
+        usAssetType = type;
+        document.getElementById('usStock').className = (type === 'Stock' ? 'sub-btn active' : 'sub-btn');
+        document.getElementById('usETF').className = (type === 'ETF' ? 'sub-btn active' : 'sub-btn');
+    }
+
+    function setCalcMode(m) {
+        currentMode = m;
+        document.getElementById('tabProfit').className = (m === 'profit' ? 'toggle-btn active' : 'toggle-btn');
+        document.getElementById('tabPrice').className = (m === 'price' ? 'toggle-btn active' : 'toggle-btn');
+        document.getElementById('targetLabel').innerText = (m === 'profit' ? '目標利潤 (%)' : '預期賣出價');
+        document.getElementById('targetVal').value = (m === 'profit' ? '10' : '');
+    }
+
+    function addBatchRow() {
+        const container = document.getElementById('batchContainer');
+        const div = document.createElement('div');
+        div.className = 'batch-row';
+        div.innerHTML = `<input type="number" class="bPrice" placeholder="價格" step="0.001">
+                         <input type="number" class="bShares" placeholder="股數">
+                         <span class="remove-btn" onclick="this.parentElement.remove()">×</span>`;
+        container.appendChild(div);
+    }
+
+    function calculate() {
+        const name = document.getElementById('stockName').value || '--';
+        const priceInputs = document.querySelectorAll('.bPrice');
+        const shareInputs = document.querySelectorAll('.bShares');
+        const target = parseFloat(document.getElementById('targetVal').value);
+
+        let totalBuyPrincipal = 0;
+        let totalShares = 0;
+        let totalBuyFee = 0;
+
+        colorIdx = (colorIdx + 1) % themeColors.length;
+        document.documentElement.style.setProperty('--primary-color', themeColors[colorIdx]);
+
+        for (let i = 0; i < priceInputs.length; i++) {
+            let p = parseFloat(priceInputs[i].value);
+            let s = parseFloat(shareInputs[i].value);
+            if (p > 0 && s > 0) {
+                let amount = p * s;
+                totalBuyPrincipal += amount;
+                totalShares += s;
+                
+                let fee = 0;
+                if (currentMarket === 'HK') {
+                    fee = Math.max(amount * 0.0025, 40) + (amount * 0.0011270);
+                } else {
+                    fee = (usAssetType === 'Stock') ? amount * 0.0008 : 3;
+                }
+                totalBuyFee += fee;
+            }
+        }
+
+        if (totalShares === 0) return alert('請至少輸入一組有效的買入價格與股數');
+
+        const avgBuyPrice = totalBuyPrincipal / totalShares;
+        const totalBuyCost = totalBuyPrincipal + totalBuyFee;
+
+        let sellPrice = (currentMode === 'profit') ? (totalBuyCost * (1 + target/100) / totalShares) * 1.004 : target;
+        let sellPrincipal = sellPrice * totalShares;
+        
+        let sellFee = 0;
+        if (currentMarket === 'HK') {
+            sellFee = Math.max(sellPrincipal * 0.0025, 40) + (sellPrincipal * 0.0011270);
+        } else {
+            sellFee = (usAssetType === 'Stock') ? sellPrincipal * 0.0008 : 3;
+        }
+        
+        const netProfit = (sellPrice * totalShares) - sellFee - totalBuyCost;
+        const profitPercent = (netProfit / totalBuyCost) * 100;
+
+        let bp = avgBuyPrice;
+        let check = 0;
+        while (check < totalBuyCost) {
+            bp += 0.001;
+            let f = 0;
+            if (currentMarket === 'HK') {
+                f = Math.max(bp * totalShares * 0.0025, 40) + (bp * totalShares * 0.0011270);
+            } else {
+                f = (usAssetType === 'Stock') ? (bp * totalShares * 0.0008) : 3;
+            }
+            check = (bp * totalShares) - f;
+        }
+
+        document.getElementById('results').style.display = 'block';
+        document.getElementById('resAvgBuy').innerText = '$' + avgBuyPrice.toFixed(3);
+        document.getElementById('resTotalFees').innerText = '$' + (totalBuyFee + sellFee).toFixed(2);
+        document.getElementById('resProfitPct').innerText = profitPercent.toFixed(2) + '%';
+        document.getElementById('resNetProfit').innerText = '$' + Math.round(netProfit).toLocaleString();
+        document.getElementById('resBreakeven').innerText = '$' + bp.toFixed(3);
+
+        const tbody = document.getElementById('historyBody');
+        const displayMarket = currentMarket === 'HK' ? 'HK' : `US(${usAssetType === 'Stock' ? '股' : 'ETF'})`;
+        const row = `<tr>
+            <td>${displayMarket}</td>
+            <td>${name}</td>
+            <td>$${avgBuyPrice.toFixed(2)}</td>
+            <td>$${sellPrice.toFixed(2)}</td>
+            <td class="profit-red">$${Math.round(netProfit).toLocaleString()}</td>
+        </tr>`;
+        tbody.insertAdjacentHTML('afterbegin', row);
+    }
+</script>
+
+</body>
+</html>
